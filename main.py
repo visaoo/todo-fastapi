@@ -1,7 +1,16 @@
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+from typing import Annotated
 
-app = FastAPI(title="Gerenciador de Tarefas", description="API CRUD de tarefas em memória.")
+from fastapi import Depends, FastAPI, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+import models
+from database import get_db
+
+app = FastAPI(title="Gerenciador de Tarefas", description="API CRUD de tarefas com SQLite.")
+
+DB = Annotated[Session, Depends(get_db)]
 
 
 class TarefaIn(BaseModel):
@@ -11,47 +20,51 @@ class TarefaIn(BaseModel):
 
 
 class Tarefa(TarefaIn):
+    model_config = ConfigDict(from_attributes=True)
     id: int
 
 
-tarefas: dict[int, Tarefa] = {}
-proximo_id = 1
-
-
-def buscar(tarefa_id: int) -> Tarefa:
-    if tarefa_id not in tarefas:
+def buscar(db: Session, tarefa_id: int) -> models.Tarefa:
+    tarefa = db.get(models.Tarefa, tarefa_id)
+    if tarefa is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Tarefa não encontrada")
-    return tarefas[tarefa_id]
+    return tarefa
 
 
 @app.get("/tarefas", response_model=list[Tarefa], tags=["Tarefas"])
-def listar(concluida: bool | None = None):
+def listar(db: DB, concluida: bool | None = None):
     """Lista tarefas. Filtro opcional por query parameter `concluida`."""
-    return [t for t in tarefas.values() if concluida is None or t.concluida == concluida]
+    query = select(models.Tarefa)
+    if concluida is not None:
+        query = query.where(models.Tarefa.concluida == concluida)
+    return db.scalars(query).all()
 
 
 @app.get("/tarefas/{tarefa_id}", response_model=Tarefa, tags=["Tarefas"])
-def obter(tarefa_id: int):
-    return buscar(tarefa_id)
+def obter(tarefa_id: int, db: DB):
+    return buscar(db, tarefa_id)
 
 
 @app.post("/tarefas", response_model=Tarefa, status_code=status.HTTP_201_CREATED, tags=["Tarefas"])
-def criar(dados: TarefaIn):
-    global proximo_id
-    tarefa = Tarefa(id=proximo_id, **dados.model_dump())
-    tarefas[proximo_id] = tarefa
-    proximo_id += 1
+def criar(dados: TarefaIn, db: DB):
+    tarefa = models.Tarefa(**dados.model_dump())
+    db.add(tarefa)
+    db.commit()
+    db.refresh(tarefa)
     return tarefa
 
 
 @app.put("/tarefas/{tarefa_id}", response_model=Tarefa, tags=["Tarefas"])
-def atualizar(tarefa_id: int, dados: TarefaIn):
-    buscar(tarefa_id)
-    tarefas[tarefa_id] = Tarefa(id=tarefa_id, **dados.model_dump())
-    return tarefas[tarefa_id]
+def atualizar(tarefa_id: int, dados: TarefaIn, db: DB):
+    tarefa = buscar(db, tarefa_id)
+    for campo, valor in dados.model_dump().items():
+        setattr(tarefa, campo, valor)
+    db.commit()
+    db.refresh(tarefa)
+    return tarefa
 
 
 @app.delete("/tarefas/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Tarefas"])
-def remover(tarefa_id: int):
-    buscar(tarefa_id)
-    del tarefas[tarefa_id]
+def remover(tarefa_id: int, db: DB):
+    db.delete(buscar(db, tarefa_id))
+    db.commit()
