@@ -1,6 +1,6 @@
 # Gerenciador de Tarefas — FastAPI
 
-API RESTful com CRUD completo de tarefas, armazenadas em memória (sem db) e validadas com Pydantic.
+API RESTful com CRUD completo de tarefas, persistidas em SQLite via SQLAlchemy, com migrações gerenciadas pelo Alembic e validação com Pydantic.
 
 ## Integrantes
 
@@ -17,6 +17,7 @@ cd todo-fastapi
 python -m venv .venv
 # windows: .venv\Scripts\activate | wsl - mac - linux: source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head   # cria o tarefas.db
 fastapi dev main.py
 ```
 
@@ -24,6 +25,26 @@ A API sobe em http://127.0.0.1:8000. Documentação automática:
 
 - Swagger: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
+
+## Estrutura
+
+| Arquivo | Conteúdo |
+|---------|----------|
+| `database.py` | Engine do SQLite, `SessionLocal`, `Base` e a dependência `get_db` (abre/fecha a sessão a cada requisição) |
+| `models.py` | Model SQLAlchemy `Tarefa` (tabela `tarefas`) |
+| `main.py` | Rotas CRUD, recebendo a sessão via `Depends(get_db)` |
+| `alembic/` | Ambiente de migração; `alembic/versions/` contém a migração inicial |
+
+O arquivo `tarefas.db` é ignorado pelo Git. Rode `alembic upgrade head` para criá-lo.
+
+### Migrações
+
+Ao alterar `models.py`:
+
+```bash
+alembic revision --autogenerate -m "descricao da mudanca"
+alembic upgrade head
+```
 
 ## Rotas
 
@@ -45,5 +66,5 @@ Exemplo de corpo (POST/PUT):
 
 ```bash
 pip install pytest
-pytest
+pytest   # roda com um banco em memória
 ```
