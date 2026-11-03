@@ -12,7 +12,7 @@ API RESTful com CRUD completo de tarefas, persistidas em SQLite via SQLAlchemy, 
 Requisitos: Python 3.10+
 
 ```bash
-git clone https://github.com/visaoo/todo-fastapi.git
+git clone -b feature/persistencia-dados-migrations https://github.com/visaoo/todo-fastapi.git
 cd todo-fastapi
 python -m venv .venv
 # windows: .venv\Scripts\activate | wsl - mac - linux: source .venv/bin/activate
