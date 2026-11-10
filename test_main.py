@@ -21,6 +21,17 @@ app.dependency_overrides[get_db] = get_test_db
 c = TestClient(app)
 
 
+def test_auth():
+    usuario = {"email": "ana@example.com", "senha": "segredo123"}
+    assert c.post("/usuarios", json=usuario).status_code == 201
+    assert c.post("/usuarios", json=usuario).status_code == 409
+    assert c.post("/token", data={"username": usuario["email"], "password": "errada"}).status_code == 401
+    assert c.post("/tarefas", json={"titulo": "x"}).status_code == 401
+    assert c.post("/tarefas", json={"titulo": "x"}, headers={"Authorization": "Bearer lixo"}).status_code == 401
+    token = c.post("/token", data={"username": usuario["email"], "password": usuario["senha"]}).json()["access_token"]
+    c.headers["Authorization"] = f"Bearer {token}"
+
+
 def test_crud():
     r = c.post("/tarefas", json={"titulo": "Estudar"})
     assert r.status_code == 201

@@ -6,11 +6,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models
+from auth import router as auth_router, usuario_atual
 from database import get_db
 
-app = FastAPI(title="Gerenciador de Tarefas", description="API CRUD de tarefas com SQLite.")
+app = FastAPI(title="Gerenciador de Tarefas", description="API CRUD de tarefas com SQLite e autenticação JWT.")
+
+app.include_router(auth_router)
 
 DB = Annotated[Session, Depends(get_db)]
+# POST/PUT/DELETE exigem JWT; GETs ficam públicos
+PROTEGIDA = [Depends(usuario_atual)]
 
 
 class TarefaIn(BaseModel):
@@ -45,7 +50,7 @@ def obter(tarefa_id: int, db: DB):
     return buscar(db, tarefa_id)
 
 
-@app.post("/tarefas", response_model=Tarefa, status_code=status.HTTP_201_CREATED, tags=["Tarefas"])
+@app.post("/tarefas", response_model=Tarefa, status_code=status.HTTP_201_CREATED, tags=["Tarefas"], dependencies=PROTEGIDA)
 def criar(dados: TarefaIn, db: DB):
     tarefa = models.Tarefa(**dados.model_dump())
     db.add(tarefa)
@@ -54,7 +59,7 @@ def criar(dados: TarefaIn, db: DB):
     return tarefa
 
 
-@app.put("/tarefas/{tarefa_id}", response_model=Tarefa, tags=["Tarefas"])
+@app.put("/tarefas/{tarefa_id}", response_model=Tarefa, tags=["Tarefas"], dependencies=PROTEGIDA)
 def atualizar(tarefa_id: int, dados: TarefaIn, db: DB):
     tarefa = buscar(db, tarefa_id)
     for campo, valor in dados.model_dump().items():
@@ -64,7 +69,7 @@ def atualizar(tarefa_id: int, dados: TarefaIn, db: DB):
     return tarefa
 
 
-@app.delete("/tarefas/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Tarefas"])
+@app.delete("/tarefas/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Tarefas"], dependencies=PROTEGIDA)
 def remover(tarefa_id: int, db: DB):
     db.delete(buscar(db, tarefa_id))
     db.commit()
