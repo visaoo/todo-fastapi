@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,9 +25,16 @@ router = APIRouter(tags=["Autenticação"])
 DB = Annotated[Session, Depends(get_db)]
 
 
+class Erro(BaseModel):
+    detail: str = Field(examples=["Mensagem de erro"])
+
+
+ERRO_401: dict[int | str, dict[str, Any]] = {401: {"model": Erro, "description": "Token ausente, inválido ou expirado"}}
+
+
 class UsuarioIn(BaseModel):
-    email: EmailStr
-    senha: str = Field(min_length=6, max_length=128)
+    email: EmailStr = Field(examples=["ana@example.com"])
+    senha: str = Field(min_length=6, max_length=128, description="Mínimo de 6 caracteres", examples=["segredo123"])
 
 
 class Usuario(BaseModel):
@@ -63,8 +70,16 @@ def usuario_atual(token: Annotated[str, Depends(oauth2_scheme)], db: DB) -> mode
     return usuario
 
 
-@router.post("/usuarios", response_model=Usuario, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/usuarios",
+    response_model=Usuario,
+    status_code=status.HTTP_201_CREATED,
+    summary="Cadastrar usuário",
+    response_description="Usuário criado (a senha nunca é devolvida)",
+    responses={409: {"model": Erro, "description": "E-mail já cadastrado"}},
+)
 def cadastrar(dados: UsuarioIn, db: DB):
+    """Cria um usuário. A senha é salva apenas como hash (`pbkdf2_sha256`)."""
     if db.scalar(select(models.Usuario).where(models.Usuario.email == dados.email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "E-mail já cadastrado")
     usuario = models.Usuario(email=dados.email, senha_hash=pwd_context.hash(dados.senha))
@@ -74,9 +89,19 @@ def cadastrar(dados: UsuarioIn, db: DB):
     return usuario
 
 
-@router.post("/token", response_model=Token)
+@router.post(
+    "/token",
+    response_model=Token,
+    summary="Login (obter token JWT)",
+    responses={401: {"model": Erro, "description": "E-mail ou senha incorretos"}},
+)
 def login(form: Annotated[OAuth2PasswordRequestForm, Depends()], db: DB):
-    """Login OAuth2: o campo `username` recebe o e-mail."""
+    """
+    Login OAuth2 (form-data). O campo **username** recebe o e-mail.
+
+    Devolve um JWT válido por 30 minutos, a ser enviado no header
+    `Authorization: Bearer <token>`.
+    """
     usuario = db.scalar(select(models.Usuario).where(models.Usuario.email == form.username))
     if usuario is None or not pwd_context.verify(form.password, usuario.senha_hash):
         raise HTTPException(
