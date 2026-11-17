@@ -97,9 +97,26 @@ eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhbmFAZXhhbXBsZS5jb20iLCJleHAiOjE
 
 Decodificado (ex.: em https://jwt.io), o payload é `{"sub": "ana@example.com", "exp": 1794266907}`.
 
+## Documentação (Swagger)
+
+Cada rota tem `summary`, docstring (vira a descrição no Swagger), `tags`, descrição dos parâmetros e as respostas de erro documentadas (`401`, `404`, `409`) com o modelo `{"detail": "..."}`. Rotas protegidas aparecem com 🔒 no título.
+
 ## Testes
 
+Os testes usam **Pytest** + **TestClient** (baseado no HTTPX) e rodam em um banco SQLite em memória, zerado a cada teste — o `tarefas.db` não é tocado.
+
 ```bash
-pip install pytest
-pytest   # roda com um banco em memória
+pip install -r requirements.txt   # já inclui o pytest
+pytest -v
 ```
+
+| Teste | Verifica |
+|-------|----------|
+| `test_listar_tarefas_retorna_200` | `GET /tarefas` responde 200 com lista vazia |
+| `test_tarefa_inexistente_retorna_404` | `GET /tarefas/999` responde 404 |
+| `test_criar_sem_token_retorna_401` | `POST /tarefas` sem token é bloqueado (401) |
+| `test_criar_com_token_invalido_retorna_401` | Token inválido é bloqueado (401) |
+| `test_cadastro_duplicado_retorna_409` | E-mail repetido em `/usuarios` responde 409 |
+| `test_login_com_senha_errada_retorna_401` | Login com senha errada responde 401 |
+| `test_criar_tarefa_com_titulo_vazio_retorna_422` | Validação do Pydantic responde 422 |
+| `test_crud_completo_com_token` | Cria, lê, atualiza, filtra e remove uma tarefa autenticado |
